@@ -1024,11 +1024,19 @@ const bottomNavItem = (active: boolean) =>
       } else if (action === 'collected') {
         const season = card.dataset.season;
         const showTmdbId = card.dataset.showTmdbId;
-        if (mediaType === 'series' && !season) return; // show-level: read-only
         const inLibrary = btn.dataset.inLibrary === 'true';
         const seriesId = showTmdbId || tmdbId;
         try {
-          if (mediaType === 'series' && season) {
+          if (mediaType === 'series' && !season) {
+            // Show-level collect/uncollect — covers all seasons
+            if (inLibrary) {
+              const ok = await showConfirm('Remove show from collection?', 'This will remove all collection entries for every episode in this show.');
+              if (!ok) return;
+              await apiFetch(`/media/collect-show?tmdb_id=${tmdbId}`, 'DELETE');
+            } else {
+              await apiFetch('/media/collect-show', 'POST', { tmdb_id: Number(tmdbId), media_type: 'series' });
+            }
+          } else if (mediaType === 'series' && season) {
             // Season-level collect/uncollect
             if (inLibrary) {
               const ok = await showConfirm('Remove season from collection?', 'This will remove all collection entries for this season.');
@@ -1054,32 +1062,23 @@ const bottomNavItem = (active: boolean) =>
               }
               await apiFetch('/media/collect', 'POST', collectBody);
             }
-          }
-          const nowInLibrary = !inLibrary;
-          btn.dataset.inLibrary = String(nowInLibrary);
-          btn.dataset.state = nowInLibrary ? 'active' : 'inactive';
-
-          const isCard = btn.parentElement?.classList.contains('grid');
-          if (nowInLibrary) {
-            btn.classList.remove('bg-zinc-800', 'bg-zinc-900', 'text-zinc-500', 'text-zinc-400', 'hover:bg-purple-500/10', 'hover:text-purple-400');
-            if (isCard) {
-              btn.classList.add('bg-purple-500/20', 'text-purple-400');
+            // Episode-level: just toggle the button locally
+            const nowInLibrary = !inLibrary;
+            btn.dataset.inLibrary = String(nowInLibrary);
+            btn.dataset.state = nowInLibrary ? 'active' : 'inactive';
+            const isCard = btn.parentElement?.classList.contains('grid');
+            if (nowInLibrary) {
+              btn.classList.remove('bg-zinc-800', 'bg-zinc-900', 'text-zinc-500', 'text-zinc-400', 'hover:bg-purple-500/10', 'hover:text-purple-400');
+              btn.classList.add(isCard ? 'bg-purple-500/20' : 'bg-purple-500/50', 'text-purple-400');
             } else {
-              btn.classList.add('bg-purple-500/50', 'text-purple-300', 'hover:bg-purple-400/50');
+              btn.classList.remove('bg-purple-500/20', 'bg-purple-500/50', 'text-purple-400', 'text-purple-300', 'hover:bg-purple-500/40', 'hover:bg-purple-400/50');
+              btn.classList.add(isCard ? 'bg-zinc-900' : 'bg-zinc-800', isCard ? 'text-zinc-400' : 'text-zinc-500');
             }
-          } else {
-            btn.classList.remove('bg-purple-500/20', 'bg-purple-500/50', 'text-purple-400', 'text-purple-300', 'hover:bg-purple-500/40', 'hover:bg-purple-400/50');
-            if (isCard) {
-              btn.classList.add('bg-zinc-900', 'text-zinc-400', 'hover:bg-purple-500/10', 'hover:text-purple-400');
-            } else {
-              btn.classList.add('bg-zinc-800', 'text-zinc-500', 'hover:bg-purple-500/50', 'hover:text-purple-400');
-            }
+            btn.title = nowInLibrary ? 'In collection' : 'Add to collection';
+            return;
           }
-
-          const collectionPct = Number(btn.dataset.collectionPct || 0);
-          btn.title = mediaType === 'series' && !season
-            ? `${collectionPct}% in library`
-            : (nowInLibrary ? 'In collection' : 'Add to collection');
+          // Season/show-level: reload so percentages and all sibling cards update
+          window.location.reload();
         } catch { /* ignore */ }
 
       } else if (action === 'rate') {
