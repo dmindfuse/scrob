@@ -1249,6 +1249,16 @@ async def get_person_details(
         formatted_credits = []
         for c in cast_credits:
             m_type = "movie" if c.get("media_type") == "movie" else "series"
+            popularity = c.get("popularity", 0)
+            # Role weight: how significant was this person's role?
+            # Movies: billing order (0 = lead, higher = smaller part)
+            # TV: episode count (more episodes = regular cast, not a guest)
+            if c.get("media_type") == "tv":
+                episode_count = c.get("episode_count") or 0
+                role_weight = min(episode_count, 20) / 20.0
+            else:
+                order = c.get("order") or 0
+                role_weight = max(0.05, 1.0 - order * 0.05)
             formatted_credits.append(
                 {
                     "tmdb_id": c.get("id"),
@@ -1257,23 +1267,26 @@ async def get_person_details(
                     "poster_path": tmdb.poster_url(c.get("poster_path")),
                     "release_date": c.get("release_date") or c.get("first_air_date"),
                     "character": c.get("character"),
-                    "popularity": c.get("popularity", 0),
+                    "popularity": popularity,
                     "adult": c.get("adult", False),
+                    "_score": popularity * max(role_weight, 0.05),
                 }
             )
         # Deduplicate by tmdb_id — a person may appear in multiple episodes of the
-        # same show; keep the entry with the highest popularity score.
+        # same show; keep the entry with the highest score.
         seen: dict[int, int] = {}  # tmdb_id -> index in formatted_credits
         deduped: list[dict] = []
         for credit in formatted_credits:
             tid = credit["tmdb_id"]
             if tid in seen:
-                if credit["popularity"] > deduped[seen[tid]]["popularity"]:
+                if credit["_score"] > deduped[seen[tid]]["_score"]:
                     deduped[seen[tid]] = credit
             else:
                 seen[tid] = len(deduped)
                 deduped.append(credit)
-        deduped.sort(key=lambda x: x["popularity"], reverse=True)
+        deduped.sort(key=lambda x: x["_score"], reverse=True)
+        for credit in deduped:
+            del credit["_score"]
         total_credits = len(deduped)
         start = (page - 1) * _PERSON_PAGE_SIZE
         top_credits = deduped[start:start + _PERSON_PAGE_SIZE]
