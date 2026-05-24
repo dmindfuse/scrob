@@ -16,6 +16,7 @@ if (user?.is_admin && token) {
   } catch {}
 }
 const blurExplicit = Astro.cookies.get("blur_explicit")?.value !== "false";
+const use24h = Astro.cookies.get("time_format_24h")?.value === "true";
 
 const pathname = Astro.url.pathname;
 const activeMovies = pathname.startsWith('/movies') || pathname.startsWith('/collection/movies') || pathname.startsWith('/trending/movies') || pathname.startsWith('/media/movie');
@@ -432,9 +433,10 @@ const bottomNavItem = (active: boolean) =>
     });
   </script>
 
-  <script define:vars={{ __layoutAuthToken: token ?? '' }}>
+  <script define:vars={{ __layoutAuthToken: token ?? '', __use24h: use24h }}>
     // Expose the server-side token for the card action script (httpOnly cookie is not JS-readable)
     window.__AUTH_TOKEN__ = __layoutAuthToken;
+    window.__USE_24H__ = __use24h;
 
     // ── Now Playing poller (Global) ──────────────────────────────────────────
     function esc(str) {
@@ -1013,7 +1015,7 @@ const bottomNavItem = (active: boolean) =>
         } else {
           eventsEl.innerHTML = events.map(ev => {
             const d = new Date(ev.watched_at.includes('Z') ? ev.watched_at : ev.watched_at + 'Z');
-            const fmt = d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+            const fmt = d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: !(window as any).__USE_24H__ });
             return `<div class="flex items-center justify-between px-4 py-2.5 hover:bg-zinc-800/50 group">
               <span class="text-sm text-zinc-200">${esc(fmt)}</span>
               <button class="text-zinc-600 group-hover:text-zinc-400 hover:!text-red-400 transition-colors cursor-pointer" data-delete-event="${ev.id}" aria-label="Remove">
